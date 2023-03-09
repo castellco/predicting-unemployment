@@ -2,10 +2,11 @@
 title: "svm"
 author: "Carolina Cornejo Castellano"
 date: '`r Sys.Date()`'
-output: html_document
+output: pdf_document
 ---
 
 # Libraries
+
 ```{r message=FALSE, warning=FALSE, include=FALSE}
 library(tidyverse)
 library(caret) # for machine learning
@@ -13,7 +14,7 @@ library(naniar) # for better handling NA
 library(fastDummies) # for 'dummifying' categorical variables
 library(factoextra)
 library(ROCR) #for plotting AUC
-library(janitor) # for estandarizing column names
+library(janitor) # for standardizing column names
 library(MASS)
 library(e1071)
 library(pROC)
@@ -51,6 +52,54 @@ ksvm_model <- ksvm(unem~.,
 # summarize the fit
 print(ksvm_model)
 ```
+```{r}
+ksvm_predictions_2018 <- predict(ksvm_model, 
+                                 newdata = df_dummified_2018)
+```
+
+
+```{r}
+conf_matrix_2018 <- table(df_dummified_2018$unem, ksvm_predictions_2018)
+conf_matrix_2018
+```
+
+
+```{r}
+accuracy <- sum(diag(conf_matrix_2018))/sum(conf_matrix_2018)
+precision <- conf_matrix_2018[2, 2]/sum(conf_matrix_2018[, 2])
+recall <- conf_matrix_2018[2, 2]/sum(conf_matrix_2018[2, ])
+specificity <- conf_matrix_2018[1, 1]/sum(conf_matrix_2018[1, ])
+```
+
+```{r}
+# Convert predicted values to numeric
+ksvm_predictions_2018 <- as.numeric(as.character(ksvm_predictions_2018))
+```
+
+
+```{r}
+roc_curve_2018 <- roc(df_dummified_2018$unem, ksvm_predictions_2018)
+auc <- auc(roc_curve_2018)
+```
+```{r}
+plot(ksvm_predictions_2018)
+```
+
+
+
+```{r}
+# Plot ROC curve
+plot(roc_curve_2018, main = "ROC Curve")
+
+# Display confusion matrix
+print(conf_matrix_2018)
+```
+
+
+
+
+
+
 
 ```{r make predictions on 2018 data}
 ksvm_probabilities <- predict(ksvm_model, 
