@@ -1,0 +1,233 @@
+---
+title: "svm"
+author: "Carolina Cornejo Castellano"
+date: '`r Sys.Date()`'
+output: html_document
+---
+
+# Libraries
+```{r message=FALSE, warning=FALSE, include=FALSE}
+library(tidyverse)
+library(caret) # for machine learning
+library(naniar) # for better handling NA
+library(fastDummies) # for 'dummifying' categorical variables
+library(factoextra)
+library(ROCR) #for plotting AUC
+library(janitor) # for estandarizing column names
+library(MASS)
+library(e1071)
+library(pROC)
+library(kernlab) # ksvm
+library(doParallel) # for parallel programming
+```
+
+# Sourcing 2017 data and cleaning
+
+```{r this is the training data}
+source("cleaning_2017.R")
+```
+
+# Sourcing 2018 data and cleaning
+
+```{r this is test data}
+source("cleaning_2018.R")
+```
+
+# Sourcing 2016 data and cleaning
+
+Following the recommendations of one of our lecturers, we tested the ksvm model of the `kernlab` package with other data, because the predictions on 2018 data were too good. So, we chose 2016 data.
+
+```{r sourcing 2016 data to take it as a second test data}
+source("cleaning_2016.R")
+```
+
+
+## Support Vector Machine
+
+```{r fit and summarize model}
+ksvm_model <- ksvm(unem~., 
+                   data = df_dummified_2017,
+                   prob.model = TRUE)
+# summarize the fit
+print(ksvm_model)
+```
+
+```{r make predictions on 2018 data}
+ksvm_probabilities <- predict(ksvm_model, 
+                              df_dummified_2018, 
+                              type = "prob")
+
+ksvm_predictions <- ifelse(ksvm_probabilities[, 2] > 0.5, 1, 0)
+```
+
+```{r}
+# Convert predicted class labels to factor with same levels as true class labels
+ksvm_predictions <- factor(ksvm_predictions, 
+                           levels = levels(df_dummified_2018$unem))
+```
+
+
+```{r evaluate the performance of the model on 2018 data}
+confusionMatrix(table(ksvm_predictions, df_dummified_2018$unem))
+```
+
+## Weighted Support Vector Machine
+
+```{r define the training control}
+train_control <- trainControl(method = "cv", 
+                              number = 5, 
+                              classProbs = TRUE, 
+                              summaryFunction = twoClassSummary, 
+                              allowParallel = TRUE)
+```
+
+```{r set up parallel processing}
+cl <- makeCluster(detectCores())bra
+registerDoParallel(cl)
+```
+
+```{r fit model}
+svm_model <- train(unem ~ ., 
+                   data = df_dummified_2017, 
+                   method = "svmRadialWeights", 
+                   trControl = train_control, 
+                   metric = "ROC")
+```
+
+```{r stop parallel processing}
+stopCluster(cl)
+```
+
+```{r get the AUC}
+auc <- svm_model$results$ROC
+```
+
+```{r plot the ROC curve}
+roc_curve <- roc(predictor = svm_model$pred$obs, 
+                 response = svm_model$pred$pred)
+
+plot(roc_curve, 
+     main = paste0("ROC Curve (AUC = ", round(auc, 2), ")"))
+```
+
+```{r}
+plot(svm_model)
+```
+
+
+
+
+
+
+
+
+<!-- ```{r predict for 2018 data} -->
+<!-- # make predictions -->
+<!-- predictions_2018 <- predict(fit_svm_2017, df_dummified_2018[, !(names(df_dummified_2018) %in% "unem")], type="response") -->
+<!-- # summarize accuracy -->
+<!-- table(predictions_2018, df_dummified_2018$unem) -->
+<!-- ``` -->
+<!-- # Testing with 2016 data -->
+
+
+
+<!-- ```{r predict for 2016 data} -->
+<!-- # make predictions -->
+<!-- predictions_2016 <- predict(fit_svm_2017, df_dummified_2016[, !(names(df_dummified_2016) %in% "unem")], type="response") -->
+<!-- # summarize accuracy -->
+<!-- table(predictions_2016, df_dummified_2016$unem) -->
+<!-- ``` -->
+
+<!-- -------------------- -->
+
+<!-- ## Starting from here there will be lots of errors: -->
+
+<!-- # AUC -->
+
+<!-- ```{r chunk23} -->
+<!-- rocplot <- function(pred, truth, ...) { -->
+<!--   predob <- prediction(pred, truth) -->
+<!--   perf <- performance(predob, "tpr", "fpr") -->
+<!--   plot(perf, ...) -->
+<!-- } -->
+<!-- ``` -->
+
+
+
+<!-- ```{#r} -->
+<!-- perf <- ROCR::performance(predictions_2018, "tpr", "fpr") -->
+
+<!-- roc2018 <- roc(predictions_2018, df_dummified_2018$unem) -->
+<!-- # Get the full AUC -->
+<!-- auc(roc2018) -->
+
+<!-- ``` -->
+
+<!-- # Fit again, now with Caret -->
+
+<!-- ```{r select numeric variables as a vector} -->
+<!-- # Select numeric variables as a vector -->
+<!-- num_vars_2017 <- df_dummified_2017 %>% -->
+<!--     # select() %>% # exclude ID variable -->
+<!--     select_if(is.numeric) %>% -->
+<!--     names() -->
+
+<!-- num_vars_2017 -->
+<!-- ``` -->
+
+<!-- ```{r select categorical variables as a vector} -->
+<!-- cat_vars_2017 <- df_dummified_2017 %>% -->
+<!--    # select() %>% # exclude ID variable -->
+<!--    select_if(is.character) %>% -->
+<!--   names() -->
+
+<!-- cat_vars_2017 -->
+<!-- ``` -->
+
+
+<!-- ```{r} -->
+
+<!-- # Train to maximize AUC: metric = "ROC" -->
+<!-- svm_caret_fit <- train(unem ~ ., -->
+<!--                        data = df_dummified_2017,  -->
+<!--                        method = "svmLinear3", #más de 200 choices.  -->
+<!--                        preProcess = c("center", "scale"), -->
+<!--                        metric = "ROC", -->
+<!--                        trControl = trainControl(method = "cv", number = 5, returnResamp = "all", classProbs = T), -->
+<!--                        tuneGrid = expand.grid(cost = c(.25, .5, 1), weight = c(1, 5)) -->
+<!--                        ) -->
+<!-- svm_caret_fit -->
+<!-- ``` -->
+
+
+<!-- Output: posterior probabilities -->
+
+<!-- ```{r} -->
+<!-- probability_svm_caret = predict(svm_caret_fit, newdata=df_dummified_2018)$posterior -->
+<!-- head(probability_svm_caret) #true=prob of students to fail. -->
+<!-- ``` -->
+
+<!-- Note different output respect to logistic regression -->
+
+<!-- ### Prediction -->
+
+<!-- To predict the student failure, we apply the Bayes' rule of maximum probability: -->
+
+<!-- ```{r} -->
+<!-- prediction_svm_caret <- max.col(probability_svm_caret) -->
+<!-- head(prediction_svm_caret) -->
+<!-- ``` -->
+
+<!-- which is equivalent to -->
+
+<!-- ```{r} -->
+<!-- prediction_svm_caret = predict(svm_caret_fit, newdata=df_dummified_2018)$class # así, R usará eñ Bayes Rule. PRob less than 50% R pensará que el student is not going to fail. -->
+<!-- head(prediction_svm_caret) -->
+<!-- ``` -->
+
+<!-- Confusion matrix: -->
+
+<!-- ```{r, echo=FALSE} -->
+<!-- confusionMatrix(prediction_svm_caret, testing$unem)$table -->
+<!-- conf -->
+<!-- ``` -->
