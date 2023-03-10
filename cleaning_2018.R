@@ -115,7 +115,17 @@ df2018 <- df2018 %>%
         hrearn = ifelse(is.na(hrearn), 0, hrearn),
         hrwage = ifelse(is.na(hrwage), 0, hrwage))
 
-
+## ---- turn some of them into character for them to be converted into factors later-----------------------------------
+df2018 <- df2018 %>%
+  mutate_at(vars("selfemp", 
+                 "selfinc", 
+                 "pubsect", 
+                 "pubfed", 
+                 "pubst", 
+                 "publoc", 
+                 "clslyr", 
+                 "hprsmort"), 
+            as.character)
 
 ## ----check if there are negative values (-9, -99) in the numeric columns-----------------------------------
 df2018 %>% 
