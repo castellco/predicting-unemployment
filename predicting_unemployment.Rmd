@@ -44,53 +44,31 @@ source("cleaning_2016.R")
 
 # SVM model
 
-```{r fit and summarize model}
-ksvm_model <- ksvm(unem~., 
-                   data = df_dummified_2017,
-                   prob.model = TRUE)
-# summarize the fit
-print(ksvm_model)
+```{r create train and test datasets, fit the model and test}
+# create a training set and a test set for predicting unem based on the 2017 data
+
+set.seed(666)
+trainIndex <- createDataPartition(df_dummified_2017$unem, p = 0.8, list = FALSE)
+train <- df_dummified_2017[trainIndex, ]
+test <- df_dummified_2017[-trainIndex, ]
+
+# fit the model
+svm_model <- ksvm(unem ~ .,
+    data = train,
+    kernel = "rbfdot",
+    C = 1,
+    scale = FALSE
+)
+
+# testing the model
+test_pred <- predict(svm_model, test)
+
+# ploting the AUC
+auc <- roc(test$unem, test_pred)
 ```
 
 ```{r}
-ksvm_predictions_2018 <- predict(ksvm_model, 
-                                 newdata = df_dummified_2018)
-```
-
-```{r}
-conf_matrix_2018 <- table(df_dummified_2018$unem, ksvm_predictions_2018)
-conf_matrix_2018
-```
-
-```{r}
-accuracy <- sum(diag(conf_matrix_2018))/sum(conf_matrix_2018)
-precision <- conf_matrix_2018[2, 2]/sum(conf_matrix_2018[, 2])
-recall <- conf_matrix_2018[2, 2]/sum(conf_matrix_2018[2, ])
-specificity <- conf_matrix_2018[1, 1]/sum(conf_matrix_2018[1, ])
-
-accuracy
-precision
-recall
-specificity
-```
-
-```{r}
-# AUC
-ksvm_predictions_2018_prob <- predict(ksvm_model, 
-                                      newdata = df_dummified_2018,
-                                      type = "prob")
-
-ksvm_predictions_2018_prob <- ksvm_predictions_2018_prob[, 2]
-
-
-
-auc_2018
-```
-
-```{r}
-auc_2018 <- roc(df_dummified_2018$unem, ksvm_predictions_2018_prob)
-auc_2018
-```
-
-```{r}
+# confussion matrix
+confusion <- confusionMatrix(test$unem, test_pred)
+confusion
 ```
