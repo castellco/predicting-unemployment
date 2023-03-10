@@ -97,7 +97,7 @@ test_pred_2018 <- predict(svm_model,
                           newdata = df_dummified_2018)
 ```
 
-```{r}
+```{r AUC}
 # Calculate AUC score
 auc_score_2018 <- auc(df_dummified_2018$unem, as.numeric(test_pred_2018))
 
@@ -116,4 +116,44 @@ legend("bottomright",
        cex = 0.8)
 ```
 
+```{r confusion matrix of 2018 predictions}
+con_matrix_2018 <- confusionMatrix(df_dummified_2018$unem, test_pred_2018)
+con_matrix_2018
+```
+
+
+## (reverse) Predicting unemployment in 2016 with SVM fit based on 2017 data
+
+```{r 2016 unemployment prediction}
+test_pred_2016 <- predict(svm_model, 
+                          newdata = df_dummified_2016)
+```
+
+```{r AUC}
+# Calculate AUC score
+auc_score_2016 <- auc(df_dummified_2016$unem, as.numeric(test_pred_2016))
+
+# Calculate ROC curve
+roc_2016 <- roc(df_dummified_2016$unem, as.numeric(test_pred_2016))
+
+# Plot ROC curve and AUC
+plot(roc_2016, 
+     col = "red", 
+     lwd = 3, 
+     main = "ROC curve 2016")
+legend("bottomright", 
+       legend = paste("AUC = ", round(auc_score_2016, 2)),
+       col = "red", 
+       lty = 1, 
+       cex = 0.8)
+```
+
+```{r}
+# Change the level names of the predicted values
+levels(test_pred_2016) <- c("0", "1")
+
+# Calculate the confusion matrix
+conf_matrix_2016 <- confusionMatrix(df_dummified_2016$unem, test_pred_2016)
+conf_matrix_2016
+```
 
