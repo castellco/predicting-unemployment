@@ -42,13 +42,17 @@ Following the recommendations of one of our lecturers, we tested the ksvm model 
 source("cleaning_2016.R")
 ```
 
+
 # SVM model
 
 ```{r create train and test datasets, fit the model and test}
 # create a training set and a test set for predicting unem based on the 2017 data
 
 set.seed(666)
-trainIndex <- createDataPartition(df_dummified_2017$unem, p = 0.8, list = FALSE)
+
+trainIndex <- createDataPartition(df_dummified_2017$unem, 
+                                  p = 0.8, 
+                                  list = FALSE)
 train <- df_dummified_2017[trainIndex, ]
 test <- df_dummified_2017[-trainIndex, ]
 
@@ -61,14 +65,35 @@ svm_model <- ksvm(unem ~ .,
 )
 
 # testing the model
-test_pred <- predict(svm_model, test)
-
-# ploting the AUC
-auc <- roc(test$unem, test_pred)
+test_pred_2017 <- predict(svm_model, test)
 ```
+
+```{r roc}
+set.seed(234)
+"ROC curve and AUC"
+
+roc_2017 = roc(response = test$unem, 
+               predictor = as.numeric(test_pred_2017))
+roc_2017
+
+control = 0
+case = 1
+
+plot.roc(roc_2017, 
+         col = "red", 
+         lwd = 3, 
+         main = "ROC curve fdi")
+```
+The latter means that R is assuming that the "control" level of the variable is the negative class and the "case" level is the positive class.
+
+```{r confusion matrix based on 2017 test set predictions}
+con_matrix_2017 <- confusionMatrix(test$unem, test_pred_2017)
+con_matrix_2017
+```
+
+## Predicting unemployment in 2018 with SVM fit based on 2017 data
 
 ```{r}
-# confussion matrix
-confusion <- confusionMatrix(test$unem, test_pred)
-confusion
+
 ```
+

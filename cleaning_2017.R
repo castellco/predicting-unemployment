@@ -112,7 +112,17 @@ df2017 <- df2017 %>%
         hrearn = ifelse(is.na(hrearn), 0, hrearn),
         hrwage = ifelse(is.na(hrwage), 0, hrwage))
 
-
+## ---- turn some of them into character for them to be converted into factors later-----------------------------------
+df2017 <- df2017 %>%
+  mutate_at(vars("selfemp", 
+                 "selfinc", 
+                 "pubsect", 
+                 "pubfed", 
+                 "pubst", 
+                 "publoc", 
+                 "clslyr", 
+                 "hprsmort"), 
+            as.character)
 
 ## ----check if there are negative values (-9, -99) in the numeric columns----------------------------------------------
 df2017 %>% 
@@ -167,7 +177,7 @@ cat_vars_2017
 ## ----dummify categorical variables------------------------------------------------------------------------------------
 # Create dummies:
 df_dummified_2017 <- dummy_cols(df2017, 
-                 select_columns = cat_vars_2017 )
+                 select_columns = cat_vars_2017)
 
 # Delete old columns:
 df_dummified_2017 <- df_dummified_2017 %>% 
