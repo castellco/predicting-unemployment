@@ -20,6 +20,7 @@ library(e1071)
 library(pROC)
 library(kernlab) # ksvm
 library(doParallel) # for parallel programming
+library(klaR)
 ```
 
 # Sourcing 2017 data and cleaning
@@ -155,5 +156,42 @@ levels(test_pred_2016) <- c("0", "1")
 # Calculate the confusion matrix
 conf_matrix_2016 <- confusionMatrix(df_dummified_2016$unem, test_pred_2016)
 conf_matrix_2016
+```
+
+
+
+# Naive Bayes
+
+```{r}
+set.seed(666)
+
+trainIndex <- createDataPartition(df_dummified_2017$unem, p = 0.8, list = FALSE)
+train <- df_dummified_2017[trainIndex, ]
+test <- df_dummified_2017[-trainIndex, ]
+```
+
+```{r}
+ctrl <- trainControl(method = "boot632",
+                     number = 10,
+                     classProbs = TRUE,
+                     allowParallel = TRUE)
+```
+
+```{r}
+weights <- ifelse(train$unem == 1, 1, 3)
+nb_model <- train(unem ~ ., 
+                  data = train, 
+                  method = "nb", 
+                  weights = weights,
+                  trControl = ctrl)
+```
+
+```{r}
+test_pred <- predict(nb_model, newdata = test)
+```
+
+```{r}
+conf_matrix_nb_2017 <- confusionMatrix(test$unem, test_pred)
+conf_matrix_nb_2017
 ```
 
