@@ -1,13 +1,19 @@
 ---
-title: "Predicting Unemployment"
+title: "Predicting Unemployment in US"
 author: "Carolina Cornejo Castellano, Juan D Mendez, Jasmin Huynh"
 date: '`r Sys.Date()`'
 output: pdf_document
 ---
 
-# Libraries
+## Intro
 
-```{r message=FALSE, warning=FALSE, include=FALSE}
+## About the Current Population Survey
+
+## Methodology
+
+### Preprocessing
+
+```{r libraries message=FALSE, warning=FALSE, include=FALSE}
 library(tidyverse)
 library(caret) # for machine learning
 library(naniar) # for better handling NA
@@ -15,20 +21,15 @@ library(fastDummies) # for 'dummifying' categorical variables
 library(factoextra)
 library(ROCR) #for plotting AUC
 library(janitor) # for standardizing column names
-library(MASS)
-library(e1071)
+#library(MASS)
 library(pROC)
-library(kernlab) # ksvm
-library(doParallel) # for parallel programming
 library(klaR)
 ```
 
-## Logistic Regression using 2015, 2016 and 2017 datasets
-
-# Read datasets, select columns and filter
 We use three datasets in order to obtain a larger training dataset. We manually selected variables and filtered keeping only people who are older than 16. Then we drop rows where negative values where present. This was the case in the columns 'incp_all' and 'hrearn'. 
-```{r}
-df <- read.csv("~/SRM II/Challenge/cps_2017.csv", sep=";") %>%
+
+```{r read datasets, select columns and filter}
+df2017 <- read.csv("cps_2017.csv", sep = ";") %>%
   dplyr::select(
     age,
     female,
@@ -51,7 +52,8 @@ df <- read.csv("~/SRM II/Challenge/cps_2017.csv", sep=";") %>%
   mutate_all(~ ifelse(. == "", NA, .)) %>%
   filter(age >= 16 & age <= 65, incp_all >= 0, hrearn >= 0)
 
-df1 <- read.csv("~/SRM II/Challenge/cps_2016.csv", sep=";") %>%
+
+df2016 <- read.csv("cps_2016.csv", sep = ";") %>%
   dplyr::select(
     age,
     female,
@@ -74,7 +76,8 @@ df1 <- read.csv("~/SRM II/Challenge/cps_2016.csv", sep=";") %>%
   mutate_all(~ ifelse(. == "", NA, .)) %>%
   filter(age >= 16 & age <= 65, incp_all >= 0, hrearn >= 0)
 
-df2 <- read.csv("~/SRM II/Challenge/cps_2015.csv", sep=";") %>%
+
+df2015 <- read.csv("cps_2015.csv", sep = ";") %>%
   dplyr::select(
     age,
     female,
@@ -102,9 +105,10 @@ df2 <- read.csv("~/SRM II/Challenge/cps_2015.csv", sep=";") %>%
 
 Next we combine the three datasets to one single dataframe 'df3'
 ```{r}
-df3 <- bind_rows(df,df1, df2) %>% filter(!is.na(unem))
+df <- bind_rows(df2017,df2016, df2015) %>% 
+  filter(!is.na(unem))
 
-summary(is.na(df3))
+summary(is.na(df))
 ```
 
 # Impute missing data
@@ -173,6 +177,9 @@ mutate(label_text = str_glue("n:{n} \n prop:{scales::percent(prop)}"))
 balanced_unem
 
 ```
+
+## Logistic Regression using 2015, 2016 and 2017 datasets
+
 ## Fit logistic regression model
 ```{r}
 # Set seed for reproducibility
