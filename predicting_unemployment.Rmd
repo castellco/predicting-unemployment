@@ -103,7 +103,6 @@ df2 <- read.csv("~/SRM II/Challenge/cps_2015.csv", sep=";") %>%
 Next we combine the three datasets to one single dataframe 'df3'
 ```{r}
 df3 <- bind_rows(df,df1, df2) %>% filter(!is.na(unem))
-  
 
 summary(is.na(df3))
 ```
@@ -199,6 +198,8 @@ model.glm <- train(unem ~ .,
                    trControl=train.control)
 summary(model.glm)
 ```
+Decrease prop: Being female; having a home mortgage; being married; incp_all
+Increase prop: Having black, hispanic or native american ethinicity; wkslyr; working in job class Private; working Full-time, part year in the last year, working Part-time, part year in the last year; usual hours per week;
 
 
 ```{r}
@@ -239,9 +240,12 @@ saveRDS(model.glm, "log_model.rds")
 ## K-nearest neighbour
 
 ```{r}
-# read model
-model_knn <- readRDS("knn_model.rds")
-# when pushing to github or submit comment reading the pre-trained model out and only include code to train model
+# Read pre-trained model (if using the pre-trained model that is provided with the Google Drive link)
+#model_knn <- readRDS("knn_model.rds")
+
+# Fit model and train
+model_knn <- train(unem ~ ., data = train_set, method = "knn")
+
 
 model_knn <- predict(model_knn, newdata = test_set, type = "prob")[,2]
 head(model_knn)
@@ -324,6 +328,21 @@ svm_model <- ksvm(unem ~ .,
 
 # testing the model
 test_pred_2017 <- predict(svm_model, test)
+
+To plot a ROC curve for your SVM model, you first need to calculate the true positive rate (TPR) and false positive rate (FPR) for different threshold values. Here's an example code to do that:
+
+```{r}
+library(pROC)
+
+# calculate TPR and FPR for different threshold values
+roc_data <- roc(test$unem, test_pred_2017)
+
+# plot the ROC curve
+plot(roc_data, main = "ROC Curve for SVM Model", 
+     xlab = "False Positive Rate", ylab = "True Positive Rate")
+```
+
+This code uses the `pROC` package to calculate the ROC curve and plot it. The `roc()` function takes the true class labels (`test$unem`) and predicted probabilities (`test_pred_2017`) as inputs, and returns a `roc` object. You can then use the `plot()` function to plot the ROC curve, with the FPR on the x-axis and TPR on the y-axis. The resulting plot will show the performance of your SVM model in terms of its ability to discriminate between positive and negative cases.
 ```
 
 ```{r roc}
