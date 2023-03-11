@@ -1,6 +1,6 @@
 ---
-title: "svm"
-author: "Carolina Cornejo Castellano"
+title: "Predicting Unemployment"
+author: "Carolina Cornejo Castellano, Juan D Mendez, Jasmin Huynh"
 date: '`r Sys.Date()`'
 output: pdf_document
 ---
@@ -22,6 +22,226 @@ library(kernlab) # ksvm
 library(doParallel) # for parallel programming
 library(klaR)
 ```
+
+## Logistic Regression using 2015, 2016 and 2017 datasets
+
+# Read datasets, select columns and filter
+We use three datasets in order to obtain a larger training dataset. We manually selected variables and filtered keeping only people who are older than 16. Then we drop rows where negative values where present. This was the case in the columns 'incp_all' and 'hrearn'. 
+```{r}
+df <- read.csv("~/SRM II/Challenge/cps_2017.csv", sep=";") %>%
+  dplyr::select(
+    age,
+    female,
+    wbhaom,
+    forborn,
+    citizen,
+    hprsmort,
+    marstat,
+    wkslyr,
+    clslyr,
+    ftptlyr,
+    unem,
+    uhours,
+    hours,
+    fulltimelw,
+    incp_all,
+    hrearn,
+    hrwage
+  ) %>%
+  mutate_all(~ ifelse(. == "", NA, .)) %>%
+  filter(age >= 16 & age <= 65, incp_all >= 0, hrearn >= 0)
+
+df1 <- read.csv("~/SRM II/Challenge/cps_2016.csv", sep=";") %>%
+  dplyr::select(
+    age,
+    female,
+    wbhaom,
+    forborn,
+    citizen,
+    hprsmort,
+    marstat,
+    wkslyr,
+    clslyr,
+    ftptlyr,
+    unem,
+    uhours,
+    hours,
+    fulltimelw,
+    incp_all,
+    hrearn,
+    hrwage
+  ) %>%
+  mutate_all(~ ifelse(. == "", NA, .)) %>%
+  filter(age >= 16 & age <= 65, incp_all >= 0, hrearn >= 0)
+
+df2 <- read.csv("~/SRM II/Challenge/cps_2015.csv", sep=";") %>%
+  dplyr::select(
+    age,
+    female,
+    wbhaom,
+    forborn,
+    citizen,
+    hprsmort,
+    marstat,
+    wkslyr,
+    clslyr,
+    ftptlyr,
+    unem,
+    uhours,
+    hours,
+    fulltimelw,
+    incp_all,
+    hrearn,
+    hrwage
+  ) %>%
+  mutate_all(~ ifelse(. == "", NA, .)) %>%
+  filter(age >= 16 & age <= 65, incp_all >= 0, hrearn >= 0)
+
+
+```
+
+Next we combine the three datasets to one single dataframe 'df3'
+```{r}
+df3 <- bind_rows(df,df1, df2) %>% filter(!is.na(unem))
+  
+
+summary(is.na(df3))
+```
+
+# Impute missing data
+We impute NAs with zeros '0'. 
+```{r}
+df3[is.na(df3)] <- 0
+summary(is.na(df3))
+```
+# Transform to factor
+```{r}
+str(df3)
+df3 <- df3 %>% mutate(across(c("wbhaom","marstat","clslyr","ftptlyr", "female","forborn", "citizen","hprsmort", "unem","fulltimelw"), as.factor))
+
+```
+
+# Plot proportion of dependent variable 'unem'
+We have a imbalanced dataset of only 3% postive cases for the dependent variable.
+```{r}
+options(warn=-1)
+sam <- theme(plot.background = element_rect(fill="#F5FFFA",color = "darkblue"),
+             plot.title = element_text(size=25, hjust=.5),
+             axis.title.x = element_text(size=25, color = "black"),
+              axis.title.y = element_text(size=25, color = "black"),
+             axis.text.x = element_text(size=20),
+             axis.text.y = element_text(size=20),
+            legend.position = "top",
+            legend.text = element_text(size=20),
+            legend.title = element_text(size=20))
+
+unem <- df3 %>%
+group_by(unem) %>%
+summarise(n = n())%>%
+mutate(prop = n / sum(n)) %>%
+ungroup()%>%
+mutate(label_text = str_glue("n:{n} \n prop:{scales::percent(prop)}"))
+
+unem
+
+options(repr.plot.width=15, repr.plot.height=10)
+unem1 <- unem %>% ggplot(aes(x = unem,y = prop,fill = unem)) + 
+geom_col(alpha=0.7,color="black") +
+geom_label(aes(label=label_text),fill="white",size =8,position=position_fill(vjust=0.3),color = "black",size = 10)+
+xlab("Unem(0,1)") +
+ylab("Prop") +
+ggtitle("Unem Bar Graph Distribution")+
+scale_y_continuous(labels = scales::percent_format())+
+theme_minimal()+
+sam
+unem1
+
+```
+# Balancing the dataset
+In order to increase the models ability to predict positve cases we create a more balanced dataset. We increase the proportion of positive cases for 'unem' from originally 3% to 13% be dropping 200000 rows of negative cases. 
+```{r}
+N= 200000
+df3 <- df3[-sample(which(df3$unem == "0"), N),]
+
+# Plot balanced unem
+balanced_unem <- df3 %>%
+group_by(unem) %>%
+summarise(n = n())%>%
+mutate(prop = n / sum(n)) %>%
+ungroup()%>%
+mutate(label_text = str_glue("n:{n} \n prop:{scales::percent(prop)}"))
+
+balanced_unem
+
+```
+## Fit logistic regression model
+```{r}
+# Set seed for reproducibility
+set.seed(666)
+
+# Crete an index
+index <- createDataPartition(df3$unem, p=.80, list=FALSE, times=1)
+
+# Create test and train data frames
+train_set <- df3[index,]
+test_set <- df3[-index,]
+nrow(train_set)
+nrow(test_set)
+
+train.control <- trainControl(method="cv", number=5)
+```
+
+```{r}
+model.glm <- train(unem ~ ., 
+                   data=train_set, 
+                   method="glm", 
+                   family=binomial,  
+                   trControl=train.control)
+summary(model.glm)
+```
+
+
+```{r}
+predictions.glm <- predict(model.glm, newdata = test_set, type = "prob")[,2]
+head(predictions.glm)
+```
+
+# Plot confusion matrix
+```{r}
+predicted_class <- as.factor(ifelse(predictions.glm > 0.5, 1, 0))
+
+# Create confusion matrix and calculate performance measures
+cm <- confusionMatrix(predicted_class, test_set$unem)
+cm
+```
+
+
+```{r}
+# ROC curve
+pred.glm <- prediction(predictions.glm, test_set$unem)
+perf.glm <- performance(pred.glm, measure = "tpr", x.measure = "fpr") 
+par(mfrow = c(1,1))
+plot(perf.glm, lty=1, col="blue", main = "Logit ROC Curve")
+```
+
+```{r}
+# Area under the curve (AUC)
+auc.glm <- performance(pred.glm, measure = "auc", x.measure = "fpr") 
+auc.glm@y.values
+
+# Save model
+saveRDS(model.glm, "log_model.rds")
+# read saved pre-trained model to skip training
+# model.glm <- readRDS("log_model.rds")
+
+```
+
+
+
+
+
+
+## Support Vector Machine using 2017 dataset for training
 
 # Sourcing 2017 data and cleaning
 
