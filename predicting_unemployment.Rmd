@@ -99,35 +99,47 @@ df2015 <- read.csv("cps_2015.csv", sep = ";") %>%
   ) %>%
   mutate_all(~ ifelse(. == "", NA, .)) %>%
   filter(age >= 16 & age <= 65, incp_all >= 0, hrearn >= 0)
-
-
 ```
 
-Next we combine the three datasets to one single dataframe 'df3'
+Next we combine the three datasets to one single dataframe 'df'
 ```{r}
 df <- bind_rows(df2017,df2016, df2015) %>% 
   filter(!is.na(unem))
+```
 
+Then, we impute NAs with zeros '0' and convert to factor. The variables that have NA are "hours", "fulltimelw" and "hprsmort".
+
+```{r}
 summary(is.na(df))
 ```
 
-# Impute missing data
-We impute NAs with zeros '0'. 
-```{r}
-df3[is.na(df3)] <- 0
-summary(is.na(df3))
-```
-# Transform to factor
-```{r}
-str(df3)
-df3 <- df3 %>% mutate(across(c("wbhaom","marstat","clslyr","ftptlyr", "female","forborn", "citizen","hprsmort", "unem","fulltimelw"), as.factor))
-
+```{r NA imputation }
+df[is.na(df)] <- 0
 ```
 
-# Plot proportion of dependent variable 'unem'
+```{r}
+str(df)
+df <- df %>% 
+  mutate(across(c("wbhaom",
+                   "marstat",
+                   "clslyr",
+                   "ftptlyr", 
+                   "female",
+                   "forborn", 
+                   "citizen",
+                   "hprsmort", 
+                   "unem",
+                   "fulltimelw"), 
+                 as.factor))
+
+```
+### Exploratory Data Analysis (EDA) 
+
+Here we ...... Plot proportion of dependent variable 'unem'
 We have a imbalanced dataset of only 3% postive cases for the dependent variable.
+
 ```{r}
-options(warn=-1)
+options(warn = -1)
 sam <- theme(plot.background = element_rect(fill="#F5FFFA",color = "darkblue"),
              plot.title = element_text(size=25, hjust=.5),
              axis.title.x = element_text(size=25, color = "black"),
@@ -138,71 +150,88 @@ sam <- theme(plot.background = element_rect(fill="#F5FFFA",color = "darkblue"),
             legend.text = element_text(size=20),
             legend.title = element_text(size=20))
 
-unem <- df3 %>%
-group_by(unem) %>%
-summarise(n = n())%>%
-mutate(prop = n / sum(n)) %>%
-ungroup()%>%
-mutate(label_text = str_glue("n:{n} \n prop:{scales::percent(prop)}"))
+unem_prop <- df %>%
+  group_by(unem) %>%
+  summarise(n = n()) %>%
+  mutate(prop = n / sum(n)) %>%
+  ungroup() %>%
+  mutate(label_text = str_glue("n:{n} \n prop:{scales::percent(prop)}"))
 
-unem
+unem_prop
 
 options(repr.plot.width=15, repr.plot.height=10)
-unem1 <- unem %>% ggplot(aes(x = unem,y = prop,fill = unem)) + 
-geom_col(alpha=0.7,color="black") +
-geom_label(aes(label=label_text),fill="white",size =8,position=position_fill(vjust=0.3),color = "black",size = 10)+
-xlab("Unem(0,1)") +
-ylab("Prop") +
-ggtitle("Unem Bar Graph Distribution")+
-scale_y_continuous(labels = scales::percent_format())+
-theme_minimal()+
-sam
-unem1
 
+unem_plot <- unem_prop %>% 
+  ggplot(aes(x = unem,
+             y = prop,
+             fill = unem)) + 
+  geom_col(alpha=0.7,
+         color = "black") +
+  geom_label(aes(label = label_text),
+           fill="white",
+           size =8,
+           position = position_fill(vjust=0.3),
+           color = "black",
+           size = 10)+
+  xlab("Unem(0,1)") +
+  ylab("Prop") +
+  ggtitle("Unem Bar Graph Distribution") +
+  scale_y_continuous(labels = scales::percent_format()) + 
+  theme_minimal() +
+  sam
+
+unem_plot
 ```
-# Balancing the dataset
-In order to increase the models ability to predict positve cases we create a more balanced dataset. We increase the proportion of positive cases for 'unem' from originally 3% to 13% be dropping 200000 rows of negative cases. 
-```{r}
-N= 200000
-df3 <- df3[-sample(which(df3$unem == "0"), N),]
+
+### Balancing the dataset
+In order to increase the models ability to predict positive cases we create a more balanced dataset. We increase the proportion of positive cases for 'unem' from originally 3% to 13% be dropping 200000 rows of negative cases. 
+
+```{r balancing the dataset}
+set.seed(666)
+
+N = 200000
+df <- df[-sample(which(df$unem == "0"), N),]
 
 # Plot balanced unem
-balanced_unem <- df3 %>%
-group_by(unem) %>%
-summarise(n = n())%>%
-mutate(prop = n / sum(n)) %>%
-ungroup()%>%
-mutate(label_text = str_glue("n:{n} \n prop:{scales::percent(prop)}"))
+unem_balanced <- df %>%
+  group_by(unem) %>%
+  summarise(n = n()) %>%
+  mutate(prop = n / sum(n)) %>%
+  ungroup()
 
-balanced_unem
-
+unem_balanced
 ```
 
-## Logistic Regression using 2015, 2016 and 2017 datasets
+## Logistic Regression 
 
-## Fit logistic regression model
+Here we used using 2015, 2016 and 2017 datasets .................
+
 ```{r}
 # Set seed for reproducibility
 set.seed(666)
 
 # Crete an index
-index <- createDataPartition(df3$unem, p=.80, list=FALSE, times=1)
+index <- createDataPartition(df$unem, 
+                             p = .80, 
+                             list = FALSE, 
+                             times = 1)
 
 # Create test and train data frames
-train_set <- df3[index,]
-test_set <- df3[-index,]
+train_set <- df[index,]
+test_set <- df[-index,]
 nrow(train_set)
 nrow(test_set)
 
-train.control <- trainControl(method="cv", number=5)
+train.control <- trainControl(method = "cv", 
+                              number = 5)
 ```
 
 ```{r}
 model.glm <- train(unem ~ ., 
-                   data=train_set, 
-                   method="glm", 
-                   family=binomial,  
-                   trControl=train.control)
+                   data = train_set, 
+                   method ="glm", 
+                   family = binomial,  
+                   trControl = train.control)
 summary(model.glm)
 ```
 Decrease prop: Being female; having a home mortgage; being married; incp_all
@@ -210,7 +239,9 @@ Increase prop: Having black, hispanic or native american ethinicity; wkslyr; wor
 
 
 ```{r}
-predictions.glm <- predict(model.glm, newdata = test_set, type = "prob")[,2]
+predictions.glm <- predict(model.glm, 
+                           newdata = test_set, 
+                           type = "prob")[,2]
 head(predictions.glm)
 ```
 
@@ -219,26 +250,36 @@ head(predictions.glm)
 predicted_class <- as.factor(ifelse(predictions.glm > 0.5, 1, 0))
 
 # Create confusion matrix and calculate performance measures
-cm <- confusionMatrix(predicted_class, test_set$unem)
+cm <- confusionMatrix(predicted_class, 
+                      test_set$unem)
 cm
 ```
 
 
 ```{r}
 # ROC curve
-pred.glm <- prediction(predictions.glm, test_set$unem)
-perf.glm <- performance(pred.glm, measure = "tpr", x.measure = "fpr") 
+pred.glm <- prediction(predictions.glm, 
+                       test_set$unem)
+perf.glm <- performance(pred.glm, 
+                        measure = "tpr", 
+                        x.measure = "fpr") 
 par(mfrow = c(1,1))
-plot(perf.glm, lty=1, col="blue", main = "Logit ROC Curve")
+
+plot(perf.glm, lty=1, 
+     col="blue", 
+     main = "Logit ROC Curve")
 ```
 
 ```{r}
 # Area under the curve (AUC)
-auc.glm <- performance(pred.glm, measure = "auc", x.measure = "fpr") 
+auc.glm <- performance(pred.glm, 
+                       measure = "auc", 
+                       x.measure = "fpr") 
 auc.glm@y.values
 
 # Save model
-saveRDS(model.glm, "log_model.rds")
+saveRDS(model.glm, 
+        "log_model.rds")
 # read saved pre-trained model to skip training
 # model.glm <- readRDS("log_model.rds")
 
@@ -251,33 +292,51 @@ saveRDS(model.glm, "log_model.rds")
 #model_knn <- readRDS("knn_model.rds")
 
 # Fit model and train
-model_knn <- train(unem ~ ., data = train_set, method = "knn")
+model_knn <- train(unem ~ ., 
+                   data = train_set, 
+                   method = "knn")
 
 
-model_knn <- predict(model_knn, newdata = test_set, type = "prob")[,2]
+model_knn <- predict(model_knn, 
+                     newdata = test_set, 
+                     type = "prob")[,2]
 head(model_knn)
 
 ```
 
 # Plot confusion matrix
 ```{r}
-predicted_class_knn <- as.factor(ifelse(model_knn > 0.5, 1, 0))
+predicted_class_knn <- as.factor(
+  ifelse(
+    model_knn > 0.5, 1, 0))
 
 # Create confusion matrix and calculate performance measures
-cm_knn <- confusionMatrix(predicted_class_knn, test_set$unem)
+cm_knn <- confusionMatrix(predicted_class_knn, 
+                          test_set$unem)
 cm_knn
 ```
+
 ```{r}
 # ROC curve
-pred.knn <- prediction(model_knn, test_set$unem)
-perf.knn <- performance(pred.knn, measure = "tpr", x.measure = "fpr") 
+pred.knn <- prediction(model_knn, 
+                       test_set$unem)
+perf.knn <- performance(pred.knn,
+                        measure = "tpr", 
+                        x.measure = "fpr") 
+
 par(mfrow = c(1,1))
-plot(perf.knn, lty=1, col="blue", main = "K-nearest neighbour ROC curve")
+
+plot(perf.knn, 
+     lty = 1, 
+     col = "blue", 
+     main = "K-nearest neighbour ROC curve")
 ```
 
 ```{r}
 # Area under the curve (AUC)
-auc.knn <- performance(pred.knn, measure = "auc", x.measure = "fpr") 
+auc.knn <- performance(pred.knn, 
+                       measure = "auc", 
+                       x.measure = "fpr") 
 auc.knn@y.values
 
 # Save model
@@ -322,6 +381,7 @@ set.seed(666)
 trainIndex <- createDataPartition(df_dummified_2017$unem, 
                                   p = 0.8, 
                                   list = FALSE)
+
 train <- df_dummified_2017[trainIndex, ]
 test <- df_dummified_2017[-trainIndex, ]
 

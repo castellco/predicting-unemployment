@@ -2,3 +2,4 @@
 !*.Rmd
 !*.R
 .Rproj.user
+log_model.rds
