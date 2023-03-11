@@ -241,6 +241,15 @@ conf_matrix_nb_2017
 
 # Random Forest
 
+```{r parallelizing}
+library(doParallel)
+
+# Register the cores or workers
+num_cores <- detectCores()
+cl <- makeCluster(num_cores)
+registerDoParallel(cl)
+```
+
 ```{r}
 set.seed(666)
 
@@ -252,12 +261,16 @@ test <- df_dummified_2017_pca_vars[-trainIndex, ]
 
 ```{r}
 ctrl <- trainControl(method = "repeatedcv", 
-                     number = 10, #10-fold cross validation
-                     classProbs = T, # using classification, in classification queremos probabilities
-                     summaryFunction=twoClassSummary, # to maximize the AUC, not the accuracy. Accuracy is bueno cuando tienes un balanced data
-                     verboseIter = T)
+                     number = 10,
+                     classProbs = T,
+                     summaryFunction=twoClassSummary,
+                     verboseIter = T,
+                     allowParallel = TRUE)
 ```
 
+```{r start timer}
+start_time <- system.time()
+```
 
 ```{r}
 rf_model <- train(unem ~ ., 
@@ -269,12 +282,9 @@ rf_model <- train(unem ~ .,
                   trControl = ctrl)
 plot(rf_model)
 
-rf_prob = predict(rf_model, test, type="prob")
-rf_prediction_2017 <- as.factor(ifelse(rf_prob[,2] > 0.1, "Yes", "No"))
-
-confusionMatrix(rf_prediction_2017, test$unem)$table
-confusionMatrix(rf_prediction_2017, test$unem)$overall[1:2]
+# rf_prob = predict(rf_model, test, type="prob")
+# rf_prediction_2017 <- as.factor(ifelse(rf_prob[,2] > 0.1, "Yes", "No"))
+# 
+# confusionMatrix(rf_prediction_2017, test$unem)$table
+# confusionMatrix(rf_prediction_2017, test$unem)$overall[1:2]
 ```
-
-
-
