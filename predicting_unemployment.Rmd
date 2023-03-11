@@ -69,7 +69,7 @@ svm_model <- ksvm(unem ~ .,
 test_pred_2017 <- predict(svm_model, test)
 ```
 
-```{r roc}
+```{r 2017 test set AUC}
 set.seed(234)
 "ROC curve and AUC"
 
@@ -87,7 +87,7 @@ plot.roc(roc_2017,
 ```
 The latter means that R is assuming that the "control" level of the variable is the negative class and the "case" level is the positive class.
 
-```{r confusion matrix based on 2017 test set predictions}
+```{r 2017 test set confusion matrix}
 con_matrix_2017 <- confusionMatrix(test$unem, test_pred_2017)
 con_matrix_2017
 ```
@@ -98,7 +98,7 @@ test_pred_2018 <- predict(svm_model,
                           newdata = df_dummified_2018)
 ```
 
-```{r AUC}
+```{r 2018 AUC}
 # Calculate AUC score
 auc_score_2018 <- auc(df_dummified_2018$unem, as.numeric(test_pred_2018))
 
@@ -117,20 +117,20 @@ legend("bottomright",
        cex = 0.8)
 ```
 
-```{r confusion matrix of 2018 predictions}
+```{r 2018 confusion matrix}
 con_matrix_2018 <- confusionMatrix(df_dummified_2018$unem, test_pred_2018)
 con_matrix_2018
 ```
 
 
-## (reverse) Predicting unemployment in 2016 with SVM fit based on 2017 data
+## Predicting unemployment in 2016 with SVM fit based on 2017 data (reverse)
 
 ```{r 2016 unemployment prediction}
 test_pred_2016 <- predict(svm_model, 
                           newdata = df_dummified_2016)
 ```
 
-```{r AUC}
+```{r 2016 AUC}
 # Calculate AUC score
 auc_score_2016 <- auc(df_dummified_2016$unem, as.numeric(test_pred_2016))
 
@@ -149,7 +149,7 @@ legend("bottomright",
        cex = 0.8)
 ```
 
-```{r}
+```{r 2016 confusion matrix}
 # Change the level names of the predicted values
 levels(test_pred_2016) <- c("0", "1")
 
@@ -157,41 +157,141 @@ levels(test_pred_2016) <- c("0", "1")
 conf_matrix_2016 <- confusionMatrix(df_dummified_2016$unem, test_pred_2016)
 conf_matrix_2016
 ```
+So far, the models have ran somewhat faster. However, the following ones take way more time computing. For that reason, starting from this point we will follow two approaches:
 
+* Performing Principal Component Analysis (PCA), in order to do feature selection
+* Parallel programming.
 
+# Principal Component Analysis
+
+```{r pca}
+# turning "unem" into numeric again, for it to be included in the PCA. Will be returned into factor again later:
+df_dummified_2017$unem <- as.numeric(df_dummified_2017$unem)
+
+# PCA:
+pca <- prcomp(df_dummified_2017, 
+              scale = T) 
+summary(pca)
+```
+
+```{#r pca}
+pca <- prcomp(df_dummified_2017[, !(names(df_dummified_2017) %in% c("unem"))], 
+              scale = T) 
+summary(pca)
+```
+
+```{r scree plot of PCA}
+fviz_screeplot(pca, addlabels = TRUE)
+```
+```{r identify the top contributing variables according to PCA}
+# extract the loadings for the first 42 PCs, that explain up to 99% of variability
+pca_loadings <- pca$rotation[, 1:42]
+
+# compute the contribution of each variable to each PC
+pca_var_contribution <- abs(pca_loadings) / sqrt(colSums(df_dummified_2017^2))
+
+# compute the total contribution of each variable across all 23 PCs
+pca_total_contribution <- rowSums(pca_var_contribution)
+
+# identify the top contributing variables
+pca_top_vars <- names(sort(pca_total_contribution, decreasing = TRUE)[1:42])
+pca_top_vars
+
+# as can be seen, "unem" is not included, but as it is our target variable, we should include it:
+pca_top_vars <- c(pca_top_vars, "unem")
+pca_top_vars
+```
+
+```{r select priotitized variables in 2017 data}
+df_dummified_2017_pca_vars <- df_dummified_2017[, pca_top_vars]
+
+df_dummified_2017_pca_vars$unem <- factor(make.names(df_dummified_2017_pca_vars$unem))
+
+dim(df_dummified_2017_pca_vars)
+
+```
+Now, we went from 87 to 43 variables. This is the dataset we are going to work with from now on.
 
 # Naive Bayes
 
+# ```{r}
+# set.seed(666)
+# 
+# trainIndex <- createDataPartition(df_dummified_2017_pca_vars$unem, p = 0.8, list = FALSE)
+# train <- df_dummified_2017_pca_vars[trainIndex, ]
+# test <- df_dummified_2017_pca_vars[-trainIndex, ]
+# ```
+# 
+# ```{r}
+# ctrl <- trainControl(method = "loocv",
+#                      number = 10,
+#                      classProbs = TRUE,
+#                      allowParallel = TRUE)
+# ```
+# 
+# ```{r}
+# weights <- ifelse(train$unem == 1, 1, 3)
+# nb_model <- train(unem ~ ., 
+#                   data = train, 
+#                   method = "nb", 
+#                   weights = weights,
+#                   trControl = ctrl)
+# ```
+# 
+# ```{r}
+# test_pred <- predict(nb_model, newdata = test)
+# ```
+# 
+# ```{r}
+# conf_matrix_nb_2017 <- confusionMatrix(test$unem, test_pred)
+# conf_matrix_nb_2017
+# ```
+
+# Random Forest
+
 ```{r}
+library(randomForest)
+library(xgboost)
+```
+```{r parallelizing}
+# Register parallel backend
+cl <- makeCluster(detectCores())
+registerDoParallel(cl)
+```
+
+```{r split the data again}
 set.seed(666)
-
-trainIndex <- createDataPartition(df_dummified_2017$unem, p = 0.8, list = FALSE)
-train <- df_dummified_2017[trainIndex, ]
-test <- df_dummified_2017[-trainIndex, ]
+trainIndex <- 1:nrow(df_dummified_2017_pca_vars)
 ```
 
-```{r}
-ctrl <- trainControl(method = "boot632",
-                     number = 10,
-                     classProbs = TRUE,
-                     allowParallel = TRUE)
+```{r define cv method}
+ctrl <- trainControl(method = "LOOCV", 
+                     classProbs = TRUE)
 ```
 
-```{r}
-weights <- ifelse(train$unem == 1, 1, 3)
-nb_model <- train(unem ~ ., 
-                  data = train, 
-                  method = "nb", 
-                  weights = weights,
-                  trControl = ctrl)
+```{r train rf using parallel programming}
+rf_model <- train(unem ~., 
+                  data = df_dummified_2017_pca_vars, 
+                  method = "rf", 
+                  trControl = ctrl, 
+                  weights = ifelse(
+                      df_dummified_2017_pca_vars$unem == 1, 5, 1), 
+                  nthread = detectCores())
 ```
 
-```{r}
-test_pred <- predict(nb_model, newdata = test)
+```{r train GBM  using parallel programming}
+gbm_model <- train(unem ~., 
+                   data = df_dummified_2017_pca_vars, 
+                   method = "gbm", 
+                   trControl = ctrl, 
+                   weights = ifelse(
+                       df_dummified_2017_pca_top_vars$unem == 1, 5, 1), 
+                   verbose = FALSE, 
+                   nthread = detectCores())
 ```
 
-```{r}
-conf_matrix_nb_2017 <- confusionMatrix(test$unem, test_pred)
-conf_matrix_nb_2017
+```{r stop parallelizing}
+# Stop parallel backend
+stopCluster(cl)
 ```
 
