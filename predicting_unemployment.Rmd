@@ -29,6 +29,30 @@ library(klaR)
 We use three datasets in order to obtain a larger training dataset. We manually selected variables and filtered keeping only people who are older than 16. Then we drop rows where negative values where present. This was the case in the columns 'incp_all' and 'hrearn'. 
 
 ```{r read datasets, select columns and filter}
+df2018 <- read.csv("cps_march_2018.csv", sep = ";") %>%
+  dplyr::select(
+    age,
+    female,
+    wbhaom,
+    forborn,
+    citizen,
+    hprsmort,
+    marstat,
+    wkslyr,
+    clslyr,
+    ftptlyr,
+    unem,
+    uhours,
+    hours,
+    fulltimelw,
+    incp_all,
+    hrearn,
+    hrwage
+  ) %>%
+  mutate_all(~ ifelse(. == "", NA, .)) %>%
+  filter(age >= 16 & age <= 65, incp_all >= 0, hrearn >= 0)
+
+
 df2017 <- read.csv("cps_2017.csv", sep = ";") %>%
   dplyr::select(
     age,
@@ -278,14 +302,74 @@ auc.glm <- performance(pred.glm,
 auc.glm@y.values
 
 # Save model
-saveRDS(model.glm, 
-        "log_model.rds")
+# saveRDS(model.glm, 
+#         "log_model.rds")
 # read saved pre-trained model to skip training
 # model.glm <- readRDS("log_model.rds")
 
 ```
 
+Predicting 2018 data
+
+```{r}
+predictions.glm <- predict(model.glm, 
+                           newdata = test_set, 
+                           type = "prob")[,2]
+head(predictions.glm)
+```
+
+
+
+
 ## K-nearest neighbour
+17.43
+```{#r parallelizing}
+library(foreach)
+library(doParallel)
+library(caret)
+
+# Specify the number of cores to use
+num_cores <- 2
+cl <- makeCluster(num_cores)
+registerDoParallel(cl)
+
+# Define the function to train and predict the KNN model
+train_and_predict <- function(train, test) {
+  # Fit model and train
+  model_knn <- train(unem ~ ., 
+                     data = train, 
+                     method = "knn")
+  
+  # Predict on test data
+  model_knn <- predict(model_knn, 
+                       newdata = test, 
+                       type = "prob")[,2]
+  
+  return(model_knn)
+}
+
+# Split the data into chunks and perform the prediction in parallel
+chunk_size <- floor(nrow(df) / num_cores)
+chunks <- split(df, rep(1:num_cores, 
+                        each = chunk_size, 
+                        length.out = nrow(df)))
+
+model_knn_parallel <- foreach(chunk = chunks, 
+                              .combine = c, 
+                              .packages = "caret") %dopar% {
+  train_and_predict(train = chunk, 
+                    test = test_set)
+}
+
+# Stop the cluster
+stopCluster(cl)
+
+# Combine the results from the parallel computation
+model_knn <- unlist(model_knn_parallel)
+
+# View the results
+head(model_knn)
+```
 
 ```{r}
 # Read pre-trained model (if using the pre-trained model that is provided with the Google Drive link)
@@ -344,6 +428,12 @@ auc.knn@y.values
 # read saved pre-trained model to skip training
 # model.glm <- readRDS("log_model.rds")
 
+```
+
+```{r predict 2018}
+model_knn <- predict(model_knn, 
+                     newdata = test_set, 
+                     type = "prob")[,2]
 ```
 
 
