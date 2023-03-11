@@ -236,8 +236,45 @@ saveRDS(model.glm, "log_model.rds")
 
 ```
 
+## K-nearest neighbour
 
+```{r}
+# read model
+model_knn <- readRDS("knn_model.rds")
+# when pushing to github or submit comment reading the pre-trained model out and only include code to train model
 
+model_knn <- predict(model_knn, newdata = test_set, type = "prob")[,2]
+head(model_knn)
+
+```
+
+# Plot confusion matrix
+```{r}
+predicted_class_knn <- as.factor(ifelse(model_knn > 0.5, 1, 0))
+
+# Create confusion matrix and calculate performance measures
+cm_knn <- confusionMatrix(predicted_class_knn, test_set$unem)
+cm_knn
+```
+```{r}
+# ROC curve
+pred.knn <- prediction(model_knn, test_set$unem)
+perf.knn <- performance(pred.knn, measure = "tpr", x.measure = "fpr") 
+par(mfrow = c(1,1))
+plot(perf.knn, lty=1, col="blue", main = "K-nearest neighbour ROC curve")
+```
+
+```{r}
+# Area under the curve (AUC)
+auc.knn <- performance(pred.knn, measure = "auc", x.measure = "fpr") 
+auc.knn@y.values
+
+# Save model
+#saveRDS(model.glm, "log_model.rds")
+# read saved pre-trained model to skip training
+# model.glm <- readRDS("log_model.rds")
+
+```
 
 
 
