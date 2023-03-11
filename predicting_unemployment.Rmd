@@ -13,7 +13,7 @@ output: pdf_document
 
 ### Preprocessing
 
-```{r libraries message=FALSE, warning=FALSE, include=FALSE}
+```{r libraries}
 library(tidyverse)
 library(caret) # for machine learning
 library(naniar) # for better handling NA
@@ -125,7 +125,7 @@ df2015 <- read.csv("cps_2015.csv", sep = ";") %>%
   filter(age >= 16 & age <= 65, incp_all >= 0, hrearn >= 0)
 ```
 
-Next we combine the three datasets to one single dataframe 'df'
+Next we combine 2017, 2016 and 2015 datasets to one single dataframe 'df'
 ```{r}
 df <- bind_rows(df2017,df2016, df2015) %>% 
   filter(!is.na(unem))
@@ -137,7 +137,7 @@ Then, we impute NAs with zeros '0' and convert to factor. The variables that hav
 summary(is.na(df))
 ```
 
-```{r NA imputation }
+```{r NA handling}
 df[is.na(df)] <- 0
 ```
 
@@ -262,15 +262,15 @@ Decrease prop: Being female; having a home mortgage; being married; incp_all
 Increase prop: Having black, hispanic or native american ethinicity; wkslyr; working in job class Private; working Full-time, part year in the last year, working Part-time, part year in the last year; usual hours per week;
 
 
-```{r}
+```{r predictions on 2017 test set}
 predictions.glm <- predict(model.glm, 
                            newdata = test_set, 
                            type = "prob")[,2]
 head(predictions.glm)
 ```
 
-# Plot confusion matrix
-```{r}
+
+```{r confusion matrix of 2017 test set}
 predicted_class <- as.factor(ifelse(predictions.glm > 0.5, 1, 0))
 
 # Create confusion matrix and calculate performance measures
@@ -278,7 +278,6 @@ cm <- confusionMatrix(predicted_class,
                       test_set$unem)
 cm
 ```
-
 
 ```{r}
 # ROC curve
@@ -312,97 +311,110 @@ auc.glm@y.values
 Predicting 2018 data
 
 ```{r}
-predictions.glm <- predict(model.glm, 
-                           newdata = test_set, 
-                           type = "prob")[,2]
-head(predictions.glm)
+df2018 <- df2018 %>% 
+  filter(!is.na(unem)) %>%
+  mutate(across(c("wbhaom",
+                   "marstat",
+                   "clslyr",
+                   "ftptlyr", 
+                   "female",
+                   "forborn", 
+                   "citizen",
+                   "hprsmort", 
+                   "unem",
+                   "fulltimelw"), 
+                 as.factor)) 
 ```
 
+The variables that have NA are "hours", "fulltimelw" and "hprsmort":
 
+```{r}
+summary(is.na(df2018))
+```
+Then, we impute NAs with zeros '0' and convert to factor. 
+```{r NA imputation }
+df2018[is.na(df2018)] <- 0
+```
 
+```{r}
+predictions.glm.2018 <- predict(model.glm, 
+                           newdata = df2018, 
+                           type = "prob")[,2]
+head(predictions.glm.2018)
+```
+
+```{r confusion matrix}
+predicted_class_2018 <- as.factor(ifelse(predictions.glm.2018 > 0.5, 1, 0))
+
+# Create confusion matrix and calculate performance measures
+cm2018 <- confusionMatrix(predicted_class_2018, 
+                      df2018$unem)
+cm2018
+```
+
+```{r}
+# ROC curve
+pred.glm.2018 <- prediction(predictions.glm.2018, 
+                       df2018$unem)
+perf.glm.2018 <- performance(pred.glm.2018, 
+                        measure = "tpr", 
+                        x.measure = "fpr") 
+par(mfrow = c(1,1))
+
+plot(perf.glm.2018, 
+     lty = 1, 
+     col = "blue", 
+     main = "Logit ROC Curve")
+```
+
+```{r}
+# Area under the curve (AUC)
+auc.glm.2018 <- performance(pred.glm.2018, 
+                       measure = "auc", 
+                       x.measure = "fpr") 
+auc.glm.2018@y.values
+
+# Save model
+# saveRDS(model.glm, 
+#         "log_model.rds")
+# read saved pre-trained model to skip training
+# model.glm <- readRDS("log_model.rds")
+
+```
 
 ## K-nearest neighbour
-17.43
-```{#r parallelizing}
-library(foreach)
-library(doParallel)
-library(caret)
-
-# Specify the number of cores to use
-num_cores <- 2
-cl <- makeCluster(num_cores)
-registerDoParallel(cl)
-
-# Define the function to train and predict the KNN model
-train_and_predict <- function(train, test) {
-  # Fit model and train
-  model_knn <- train(unem ~ ., 
-                     data = train, 
-                     method = "knn")
-  
-  # Predict on test data
-  model_knn <- predict(model_knn, 
-                       newdata = test, 
-                       type = "prob")[,2]
-  
-  return(model_knn)
-}
-
-# Split the data into chunks and perform the prediction in parallel
-chunk_size <- floor(nrow(df) / num_cores)
-chunks <- split(df, rep(1:num_cores, 
-                        each = chunk_size, 
-                        length.out = nrow(df)))
-
-model_knn_parallel <- foreach(chunk = chunks, 
-                              .combine = c, 
-                              .packages = "caret") %dopar% {
-  train_and_predict(train = chunk, 
-                    test = test_set)
-}
-
-# Stop the cluster
-stopCluster(cl)
-
-# Combine the results from the parallel computation
-model_knn <- unlist(model_knn_parallel)
-
-# View the results
-head(model_knn)
-```
 
 ```{r}
 # Read pre-trained model (if using the pre-trained model that is provided with the Google Drive link)
 #model_knn <- readRDS("knn_model.rds")
 
 # Fit model and train
-model_knn <- train(unem ~ ., 
+model.knn <- train(unem ~ ., 
                    data = train_set, 
                    method = "knn")
 
 
-model_knn <- predict(model_knn, 
+pred.knn <- predict(model.knn, 
                      newdata = test_set, 
                      type = "prob")[,2]
-head(model_knn)
-
 ```
 
 # Plot confusion matrix
 ```{r}
 predicted_class_knn <- as.factor(
   ifelse(
-    model_knn > 0.5, 1, 0))
+    pred.knn > 0.5, 1, 0))
 
 # Create confusion matrix and calculate performance measures
-cm_knn <- confusionMatrix(predicted_class_knn, 
+cm.knn <- confusionMatrix(predicted_class_knn, 
                           test_set$unem)
-cm_knn
+cm.knn
 ```
 
+ARREGLAR ESTO
 ```{r}
 # ROC curve
-pred.knn <- prediction(model_knn, 
+pred.knn <- prediction(model.knn, 
                        test_set$unem)
 perf.knn <- performance(pred.knn,
                         measure = "tpr", 
@@ -430,40 +442,91 @@ auc.knn@y.values
 
 ```
 
+Now predict 2018 with knn:
+
 ```{r predict 2018}
-model_knn <- predict(model_knn, 
-                     newdata = test_set, 
+pred.knn.2018 <- predict(model.knn, 
+                     newdata = df2018, 
                      type = "prob")[,2]
 ```
 
+# Plot confusion matrix
+```{r}
+predicted_class_knn_2018 <- as.factor(
+  ifelse(
+    pred.knn.2018 > 0.5, 1, 0))
+
+# Create confusion matrix and calculate performance measures
+cm.knn.2018 <- confusionMatrix(predicted_class_knn_2018, 
+                          df2018$unem)
+cm.knn.2018
+```
+
+```{#r}
+# ROC curve
+pred.knn.2018 <- prediction(model.knn, 
+                       df2018$unem)
 
 
-## Support Vector Machine using 2017 dataset for training
+perf.knn.2018 <- performance(pred.knn.2018,
+                        measure = "tpr", 
+                        x.measure = "fpr") 
 
-# Sourcing 2017 data and cleaning
+par(mfrow = c(1,1))
 
-```{r this is the training data}
+plot(perf.knn.2018, 
+     lty = 1, 
+     col = "blue", 
+     main = "K-nearest neighbour ROC curve")
+```
+
+```{#r}
+# Area under the curve (AUC)
+auc.knn <- performance(pred.knn, 
+                       measure = "auc", 
+                       x.measure = "fpr") 
+auc.knn@y.values
+
+# Save model
+#saveRDS(model.glm, "log_model.rds")
+# read saved pre-trained model to skip training
+# model.glm <- readRDS("log_model.rds")
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+# Support Vector Machine using 2017 dataset for training
+
+
+```{#r this is the training data}
 source("cleaning_2017.R")
 ```
 
-# Sourcing 2018 data and cleaning
 
-```{r this is test data}
+```{#r this is test data}
 source("cleaning_2018.R")
 ```
 
-# Sourcing 2016 data and cleaning
-
 Following the recommendations of one of our lecturers, we tested the ksvm model of the `kernlab` package with other data, because the predictions on 2018 data were too good. So, we chose 2016 data.
 
-```{r sourcing 2016 data to take it as a second test data}
+```{#r sourcing 2016 data to take it as a second test data}
 source("cleaning_2016.R")
 ```
 
 
-# SVM model
+## SVM model
 
-```{r create train and test datasets, fit the model and test}
+```{#r create train and test datasets, fit the model and test}
 # create a training set and a test set for predicting unem based on the 2017 data
 
 set.seed(666)
@@ -488,7 +551,7 @@ test_pred_2017 <- predict(svm_model, test)
 
 To plot a ROC curve for your SVM model, you first need to calculate the true positive rate (TPR) and false positive rate (FPR) for different threshold values. Here's an example code to do that:
 
-```{r}
+```{#r}
 library(pROC)
 
 # calculate TPR and FPR for different threshold values
@@ -502,7 +565,7 @@ plot(roc_data, main = "ROC Curve for SVM Model",
 This code uses the `pROC` package to calculate the ROC curve and plot it. The `roc()` function takes the true class labels (`test$unem`) and predicted probabilities (`test_pred_2017`) as inputs, and returns a `roc` object. You can then use the `plot()` function to plot the ROC curve, with the FPR on the x-axis and TPR on the y-axis. The resulting plot will show the performance of your SVM model in terms of its ability to discriminate between positive and negative cases.
 ```
 
-```{r 2017 test set AUC}
+```{# r 2017 test set AUC}
 set.seed(234)
 "ROC curve and AUC"
 
@@ -520,18 +583,18 @@ plot.roc(roc_2017,
 ```
 The latter means that R is assuming that the "control" level of the variable is the negative class and the "case" level is the positive class.
 
-```{r 2017 test set confusion matrix}
+```{# r 2017 test set confusion matrix}
 con_matrix_2017 <- confusionMatrix(test$unem, test_pred_2017)
 con_matrix_2017
 ```
 ## Predicting unemployment in 2018 with SVM fit based on 2017 data
 
-```{r 2018 unemployment prediction}
+```{# r 2018 unemployment prediction}
 test_pred_2018 <- predict(svm_model, 
                           newdata = df_dummified_2018)
 ```
 
-```{r 2018 AUC}
+```{# r 2018 AUC}
 # Calculate AUC score
 auc_score_2018 <- auc(df_dummified_2018$unem, as.numeric(test_pred_2018))
 
@@ -550,7 +613,7 @@ legend("bottomright",
        cex = 0.8)
 ```
 
-```{r 2018 confusion matrix}
+```{#r 2018 confusion matrix}
 con_matrix_2018 <- confusionMatrix(df_dummified_2018$unem, test_pred_2018)
 con_matrix_2018
 ```
@@ -558,12 +621,12 @@ con_matrix_2018
 
 ## Predicting unemployment in 2016 with SVM fit based on 2017 data (reverse)
 
-```{r 2016 unemployment prediction}
+```{#r 2016 unemployment prediction}
 test_pred_2016 <- predict(svm_model, 
                           newdata = df_dummified_2016)
 ```
 
-```{r 2016 AUC}
+```{#r 2016 AUC}
 # Calculate AUC score
 auc_score_2016 <- auc(df_dummified_2016$unem, as.numeric(test_pred_2016))
 
@@ -582,7 +645,7 @@ legend("bottomright",
        cex = 0.8)
 ```
 
-```{r 2016 confusion matrix}
+```{#r 2016 confusion matrix}
 # Change the level names of the predicted values
 levels(test_pred_2016) <- c("0", "1")
 
@@ -597,7 +660,7 @@ So far, the models have ran somewhat faster. However, the following ones take wa
 
 # Principal Component Analysis
 
-```{r pca}
+```{#r pca}
 # turning "unem" into numeric again, for it to be included in the PCA. Will be returned into factor again later:
 df_dummified_2017$unem <- as.numeric(df_dummified_2017$unem)
 
@@ -613,10 +676,10 @@ pca <- prcomp(df_dummified_2017[, !(names(df_dummified_2017) %in% c("unem"))],
 summary(pca)
 ```
 
-```{r scree plot of PCA}
+```{#r scree plot of PCA}
 fviz_screeplot(pca, addlabels = TRUE)
 ```
-```{r identify the top contributing variables according to PCA}
+```{#r identify the top contributing variables according to PCA}
 # extract the loadings for the first 42 PCs, that explain up to 99% of variability
 pca_loadings <- pca$rotation[, 1:42]
 
@@ -635,7 +698,7 @@ pca_top_vars <- c(pca_top_vars, "unem")
 pca_top_vars
 ```
 
-```{r select priotitized variables in 2017 data}
+```{#r select priotitized variables in 2017 data}
 df_dummified_2017_pca_vars <- df_dummified_2017[, pca_top_vars]
 
 df_dummified_2017_pca_vars$unem <- factor(make.names(df_dummified_2017_pca_vars$unem))
@@ -674,7 +737,7 @@ conf_matrix_nb_2017
 
 # Random Forest
 
-```{r parallelizing}
+```{#r parallelizing}
 library(doParallel)
 
 # Register the cores or workers
@@ -683,7 +746,7 @@ cl <- makeCluster(num_cores)
 registerDoParallel(cl)
 ```
 
-```{r}
+```{#r}
 set.seed(666)
 
 trainIndex <- createDataPartition(df_dummified_2017_pca_vars$unem, 
@@ -692,7 +755,7 @@ train <- df_dummified_2017_pca_vars[trainIndex, ]
 test <- df_dummified_2017_pca_vars[-trainIndex, ]
 ```
 
-```{r}
+```{#r}
 ctrl <- trainControl(method = "repeatedcv", 
                      number = 10,
                      classProbs = T,
@@ -701,11 +764,11 @@ ctrl <- trainControl(method = "repeatedcv",
                      allowParallel = TRUE)
 ```
 
-```{r start timer}
+```{#r start timer}
 start_time <- system.time()
 ```
 
-```{r}
+```{#r}
 rf_model <- train(unem ~ ., 
                   data = train,
                   method = "rf",   
@@ -721,3 +784,6 @@ plot(rf_model)
 # confusionMatrix(rf_prediction_2017, test$unem)$table
 # confusionMatrix(rf_prediction_2017, test$unem)$overall[1:2]
 ```
+
+## Bibliography
+
